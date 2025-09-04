@@ -67,8 +67,9 @@ in
       };
       port = lib.mkOption {
         type = lib.types.int;
-        default = config.services.postgresql.settings.port;
+        default = 5432;
         description = "Port of postgresql database";
+        example = "config.services.postgresql.settings.port";
       };
       socket = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
