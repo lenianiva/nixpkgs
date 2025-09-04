@@ -107,7 +107,6 @@ in
     start_all()
 
     # Ensure the services are running and not dead
-    server.succeed("systemctl status concourse-web")
-    server.succeed("systemctl status postgresql")
+    server.wait_for_unit("concourse-web")
   '';
 }

@@ -18,6 +18,38 @@ in
       default = "concourse";
       description = "User account under which concourse runs.";
     };
+    network = {
+      peer-address = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Address to reach this `web` node from another `web` node";
+      };
+      bind-port = lib.mkOption {
+        type = lib.types.int;
+        default = 8080;
+        description = "Web interface bind port";
+      };
+      external-url = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "URL visible from the outside accessible by Concourse users";
+      };
+      api-max-conns = lib.mkOption {
+        type = lib.types.int;
+        default = 10;
+        description = "Maximum number of API connections";
+      };
+      backend-max-conns = lib.mkOption {
+        type = lib.types.int;
+        default = 50;
+        description = "Maximum number of backend connections";
+      };
+      cluster-name = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Name of this cluster";
+      };
+    };
     postgres = {
       host = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -60,6 +92,11 @@ in
         default = null;
         description = "Path to TSA authorized keys";
       };
+    };
+    extra-options = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Extra options to pass to concourse executable";
     };
     environment = lib.mkOption {
       default = { };
@@ -108,7 +145,7 @@ in
           UMask = "0007";
           ConfigurationDirectory = "concourse-web";
           EnvironmentFile = cfg.environmentFile;
-          ExecStart = "${cfg.package}/bin/concourse web";
+          ExecStart = "${cfg.package}/bin/concourse web --bind-port ${toString cfg.network.bind-port} ${cfg.extra-options}";
           Restart = "on-failure";
           RestartSec = 15;
           CapabilityBoundingSet = "";
@@ -144,6 +181,12 @@ in
           CONCOURSE_POSTGRES_PASSWORD = cfg.postgres.password;
           CONCOURSE_TSA_HOST_KEY = cfg.keys.tsa-host;
           CONCOURSE_TSA_AUTHORIZED_KEYS = cfg.keys.tsa-authorized-keys;
+
+          CONCOURSE_PEER_ADDRESS = cfg.network.peer-address;
+          CONCOURSE_EXTERNAL_URL = cfg.network.external-url;
+          CONCOURSE_API_MAX_CONNS = lib.mapNullable toString cfg.network.api-max-conns;
+          CONCOURSE_BACKEND_MAX_CONNS = lib.mapNullable toString cfg.network.backend-max-conns;
+          CONCOURSE_CLUSTER_NAME = cfg.network.cluster-name;
         }
         // cfg.environment;
       };
