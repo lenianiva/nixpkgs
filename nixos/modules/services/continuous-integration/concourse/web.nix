@@ -55,7 +55,7 @@ in
           UMask = "0007";
           ConfigurationDirectory = "concourse-web";
           EnvironmentFile = cfg.environmentFile;
-          ExecStart = "${cfg.package}/bin/concourse-web";
+          ExecStart = "${cfg.package}/bin/concourse web";
           Restart = "on-failure";
           RestartSec = 15;
           CapabilityBoundingSet = "";
