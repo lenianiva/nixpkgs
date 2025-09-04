@@ -117,6 +117,6 @@ buildGoModule rec {
     description = "A container-based automation system written in Go.";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
     license = licenses.asl20;
-    # TODO maintainers
+    maintainers = with maintainers; [ lenianiva ];
   };
 }

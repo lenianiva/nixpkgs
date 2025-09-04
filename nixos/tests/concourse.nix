@@ -36,8 +36,8 @@ let
 in
 {
   name = concoursePackage.pname;
-  meta.maintainers = [
-    # FIXME: Add maintainers
+  meta.maintainers = with lib.maintainers; [
+    lenianiva
   ];
 
   nodes = {
@@ -66,15 +66,16 @@ in
           openssh.enable = true;
           concourse-web = {
             enable = true;
+            postgres = {
+              inherit database password;
+              user = username;
+            };
+            keys = {
+              tsa-host = "${tsa-host-key}";
+            };
             environment = {
               CONCOURSE_ADD_LOCAL_USER = "${username}:${password}";
               CONCOURSE_MAIN_TEAM_LOCAL_USER = username;
-              CONCOURSE_POSTGRES_DATABASE = database;
-              CONCOURSE_POSTGRES_USER = username;
-              CONCOURSE_POSTGRES_PASSWORD = password;
-              CONCOURSE_TSA_HOST_KEY = "${tsa-host-key}";
-              CONCOURSE_POSTGRES_PORT = toString config.services.postgresql.settings.port;
-              CONCOURSE_POSTGRES_SOCKET = "/var/run/postgresql";
             };
           };
           postgresql = {

@@ -8,6 +8,8 @@ let
   cfg = config.services.concourse-web;
 in
 {
+  meta.maintainers = with lib.maintainers; [ lenianiva ];
+
   options.services.concourse-web = {
     enable = lib.mkEnableOption "A container-based automation system written in Go. (The web server part)";
     package = lib.mkPackageOption pkgs "concourse" { };
@@ -16,11 +18,51 @@ in
       default = "concourse";
       description = "User account under which concourse runs.";
     };
-    environment = lib.mkOption {
-      default = {
-        CONCOURSE_POSTGRES_PORT = toString config.services.postgresql.settings.port;
-        CONCOURSE_POSTGRES_SOCKET = "/var/run/postgresql";
+    postgres = {
+      host = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "127.0.0.1";
+        description = "Host of postgresql database";
       };
+      port = lib.mkOption {
+        type = lib.types.int;
+        default = config.services.postgresql.settings.port;
+        description = "Port of postgresql database";
+      };
+      socket = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "/var/run/postgresql";
+        description = "Socket address for locally hosted postgres. Set this to `null` to use host and port.";
+      };
+      database = lib.mkOption {
+        type = lib.types.str;
+        default = "atc";
+        description = "Database name";
+      };
+      user = lib.mkOption {
+        type = lib.types.str;
+        default = "concourse";
+        description = "Database user name";
+      };
+      password = lib.mkOption {
+        type = lib.types.str;
+        default = "concourse";
+        description = "Database user password";
+      };
+    };
+    keys = {
+      tsa-host = lib.mkOption {
+        type = lib.types.str;
+        description = "Path to TSA host key";
+      };
+      tsa-authorized-keys = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Path to TSA authorized keys";
+      };
+    };
+    environment = lib.mkOption {
+      default = { };
       type = lib.types.attrsOf lib.types.str;
       example = lib.literalExpression ''
         {
@@ -94,7 +136,16 @@ in
           SystemCallArchitectures = "native";
           SystemCallFilter = "~@clock @privileged @cpu-emulation @debug @keyring @module @mount @obsolete @raw-io @reboot @setuid @swap";
         };
-        inherit (cfg) environment;
+        environment = {
+          CONCOURSE_POSTGRES_PORT = toString cfg.postgres.port;
+          CONCOURSE_POSTGRES_SOCKET = cfg.postgres.socket;
+          CONCOURSE_POSTGRES_DATABASE = cfg.postgres.database;
+          CONCOURSE_POSTGRES_USER = cfg.postgres.user;
+          CONCOURSE_POSTGRES_PASSWORD = cfg.postgres.password;
+          CONCOURSE_TSA_HOST_KEY = cfg.keys.tsa-host;
+          CONCOURSE_TSA_AUTHORIZED_KEYS = cfg.keys.tsa-authorized-keys;
+        }
+        // cfg.environment;
       };
     };
   };
