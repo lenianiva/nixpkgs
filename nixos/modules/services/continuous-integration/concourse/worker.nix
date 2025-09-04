@@ -95,7 +95,6 @@ in
         wants = [ "network-online.target" ];
         serviceConfig = {
           # Worker must be run as root, because it needs to launch containers
-          User = "root";
           #WorkingDirectory = cfg.work-dir;
           StateDirectory = cfg.work-dir;
           StateDirectoryMode = "0700";
@@ -109,7 +108,7 @@ in
           # Security
           NoNewPrivileges = true;
           # Sandboxing
-          ProtectSystem = "strict";
+          ProtectSystem = "full";
           ProtectHome = true;
           PrivateTmp = true;
           PrivateDevices = true;
