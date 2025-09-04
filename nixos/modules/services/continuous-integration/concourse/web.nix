@@ -53,6 +53,11 @@ in
         default = null;
         description = "Name of this cluster";
       };
+      p2p-volume-streaming = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Set to true to let the workers use p2p volume streaming.";
+      };
     };
     postgres = {
       host = lib.mkOption {
@@ -198,6 +203,8 @@ in
           CONCOURSE_API_MAX_CONNS = lib.mapNullable toString cfg.network.api-max-conns;
           CONCOURSE_BACKEND_MAX_CONNS = lib.mapNullable toString cfg.network.backend-max-conns;
           CONCOURSE_CLUSTER_NAME = cfg.network.cluster-name;
+
+          CONCOURSE_ENABLE_P2P_VOLUME_STREAMING = toString cfg.network.p2p-volume-streaming;
         }
         // cfg.environment;
       };

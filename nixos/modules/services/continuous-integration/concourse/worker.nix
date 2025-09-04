@@ -43,6 +43,23 @@ in
         description = "Private key for this worker";
       };
     };
+    p2p = {
+      bind-ip = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "IP for P2P Worker Volume Sharing";
+      };
+      interface-name-pattern = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Regex to match a network interface";
+      };
+      interface-family = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "4";
+        description = "Set to 4 for IPv4 interface, 6 for IPv6";
+      };
+    };
     extra-options = lib.mkOption {
       type = lib.types.str;
       default = "";
@@ -121,6 +138,10 @@ in
           CONCOURSE_TSA_HOST = cfg.tsa.host;
           CONCOURSE_TSA_PUBLIC_KEY = cfg.tsa.public-key;
           CONCOURSE_TSA_WORKER_PRIVATE_KEY = cfg.tsa.worker-private-key;
+
+          CONCOURSE_BAGGAGECLAIM_BIND_IP = cfg.p2p.bind-ip;
+          CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_NAME_PATTERN = cfg.p2p.interface-name-pattern;
+          CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_FAMILY = cfg.p2p.interface-family;
         }
         // cfg.environment;
       };

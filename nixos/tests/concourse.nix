@@ -162,6 +162,16 @@ in
           };
         };
       };
+    client =
+      { config, pkgs, ... }:
+      {
+        environment = {
+          variables.EDITOR = "vim";
+          systemPackages = [
+            pkgs.fly
+          ];
+        };
+      };
   };
 
   testScript = ''
