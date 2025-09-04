@@ -21,6 +21,7 @@ in
     session-signing-key = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
+      description = "Path to session signing private key";
     };
     network = {
       peer-address = lib.mkOption {
