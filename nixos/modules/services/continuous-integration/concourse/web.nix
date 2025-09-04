@@ -11,16 +11,27 @@ in
   options.services.concourse-web = {
     enable = lib.mkEnableOption "A container-based automation system written in Go. (The web server part)";
     package = lib.mkPackageOption pkgs "concourse" { };
+    user = lib.mkOption {
+      type = lib.types.str;
+      default = "concourse";
+      description = "User account under which concourse runs.";
+    };
     environment = lib.mkOption {
-      default = { };
+      default = {
+        CONCOURSE_POSTGRES_PORT = toString config.services.postgresql.settings.port;
+        CONCOURSE_POSTGRES_SOCKET = "/var/run/postgresql";
+      };
       type = lib.types.attrsOf lib.types.str;
       example = lib.literalExpression ''
         {
+          CONCOURSE_POSTGRES_PORT = toString config.services.postgresql.settings.port;
+          CONCOURSE_POSTGRES_SOCKET = "/var/run/postgresql";
           CONCOURSE_POSTGRES_HOST=127.0.0.1 # default
-          CONCOURSE_POSTGRES_PORT=5432      # default
           CONCOURSE_POSTGRES_DATABASE=atc   # default
           CONCOURSE_POSTGRES_USER=my-user
           CONCOURSE_POSTGRES_PASSWORD=my-password
+          CONCOURSE_TSA_HOST_KEY=/etc/concourse/host-key
+          CONCOURSE_TSA_AUTHORIZED_KEYS=/etc/concourse/authorized_worker_keys.pub
         }
       '';
       description = "Concourse web server environment variables [documentation](https://concourse-ci.org/concourse-web.html#web-running)";
@@ -48,7 +59,7 @@ in
         after = [ "network-online.target" ];
         wants = [ "network-online.target" ];
         serviceConfig = {
-          DynamicUser = true;
+          User = cfg.user;
           WorkingDirectory = "%S/concourse-web";
           StateDirectory = "concourse-web";
           StateDirectoryMode = "0700";
