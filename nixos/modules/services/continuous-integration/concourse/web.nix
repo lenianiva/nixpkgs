@@ -18,6 +18,10 @@ in
       default = "concourse";
       description = "User account under which concourse runs.";
     };
+    session-signing-key = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+    };
     network = {
       peer-address = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -82,12 +86,17 @@ in
         description = "Database user password";
       };
     };
-    keys = {
-      tsa-host = lib.mkOption {
+    tsa = {
+      host = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Host specification (e.g. web:2222)";
+      };
+      host-key = lib.mkOption {
         type = lib.types.str;
         description = "Path to TSA host key";
       };
-      tsa-authorized-keys = lib.mkOption {
+      authorized-keys = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = "Path to TSA authorized keys";
@@ -179,8 +188,10 @@ in
           CONCOURSE_POSTGRES_DATABASE = cfg.postgres.database;
           CONCOURSE_POSTGRES_USER = cfg.postgres.user;
           CONCOURSE_POSTGRES_PASSWORD = cfg.postgres.password;
-          CONCOURSE_TSA_HOST_KEY = cfg.keys.tsa-host;
-          CONCOURSE_TSA_AUTHORIZED_KEYS = cfg.keys.tsa-authorized-keys;
+          CONCOURSE_SESSION_SIGNING_KEY = cfg.session-signing-key;
+          CONCOURSE_TSA_HOST = cfg.tsa.host;
+          CONCOURSE_TSA_HOST_KEY = cfg.tsa.host-key;
+          CONCOURSE_TSA_AUTHORIZED_KEYS = cfg.tsa.authorized-keys;
 
           CONCOURSE_PEER_ADDRESS = cfg.network.peer-address;
           CONCOURSE_EXTERNAL_URL = cfg.network.external-url;
