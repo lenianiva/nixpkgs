@@ -12,6 +12,7 @@
   elm2nix,
   nixfmt,
   nixosTests,
+  dockerTools,
 }:
 
 let
@@ -19,20 +20,27 @@ let
 
   yarn-berry = yarn-berry_4;
   buildGoModule = buildGo125Module;
-in
-buildGoModule rec {
-  inherit version;
-  pname = "concourse";
   src = fetchFromGitHub {
     owner = "concourse";
     repo = "concourse";
     rev = "v${version}";
     hash = "sha256-Q+j41QhhibyE+a7iOgMKm2SeXhNV8ek97P014Wje9NQ=";
   };
-  vendorHash = "sha256-2busKAFaQYE82XKCAx8BGOMjjs8WzqIxdpz+J45maoc=";
+in
+stdenv.mkDerivation rec {
+  pname = "concourse";
+  meta = with lib; {
+    homepage = "https://concourse-ci.org";
+    description = "A container-based automation system written in Go.";
+    platforms = lib.platforms.linux ++ lib.platforms.darwin;
+    license = licenses.asl20;
+    maintainers = with maintainers; [ lenianiva ];
+  };
+  inherit version src;
 
   webui = stdenv.mkDerivation (finalAttrs: {
-    inherit pname version src;
+    pname = "concourse-webui";
+    inherit version src;
 
     nativeBuildInputs = [
       nodejs
@@ -84,43 +92,60 @@ buildGoModule rec {
       runHook postInstall
     '';
   });
+  executable = buildGoModule rec {
+    pname = "concourse-executable";
+    inherit version;
+    vendorHash = "sha256-2busKAFaQYE82XKCAx8BGOMjjs8WzqIxdpz+J45maoc=";
+    inherit src;
 
-  subPackages = [ "cmd/concourse" ];
-  ldflags = [
-    "-s"
-    "-w"
-    "-X github.com/concourse/concourse.Version=${version}"
-  ];
+    subPackages = [ "cmd/concourse" ];
+    ldflags = [
+      "-s"
+      "-w"
+      "-X github.com/concourse/concourse.Version=${version}"
+    ];
 
-  preBuild = ''
-    cp -r ${webui}/public web
+    preBuild = ''
+      cp -r ${webui}/public web
+    '';
+
+    doCheck = false; # Tests broken
+
+  };
+  binary-tar = fetchTarball {
+    url = "https://github.com/concourse/concourse/releases/download/v${version}/concourse-${version}-linux-amd64.tgz";
+    sha256 = "0f0kblsig0d3j4swynxj16pa5iycxa92bd4pm5vzxqr3nn4w2ncl";
+  };
+  resource-types-registry-image = dockerTools.pullImage {
+    imageName = "concourse/registry-image-resource";
+    imageDigest = "sha256:27559348791ac3099f7ed1954485ce61eb92d0f1f356110635fd878ba5cb0177";
+    finalImageTag = "1.13";
+    sha256 = "sha256-iNaF2UucJ9Jfb1LYHhsOReX/1owoa/H7LSdXnO9iCxg=";
+  };
+  dontConfigure = true;
+  dontBuild = true;
+  installPhase = ''
+    mkdir -p $out/bin
+    cp ${executable}/bin/concourse $out/bin/
+    cp -r ${binary-tar}/resource-types $out/resource-types
   '';
 
-  doCheck = false; # TODO tests broken
+    passthru = {
+      tests = nixosTests.concourse;
+      updateScript = writeShellScript "update-concourse" ''
+        set -eu -o pipefail
 
-  passthru = {
-    tests = nixosTests.concourse;
-    updateScript = writeShellScript "update-concourse" ''
-      set -eu -o pipefail
+        # Update version, src and npm deps
+        ${lib.getExe nix-update} "$UPDATE_NIX_ATTR_PATH"
 
-      # Update version, src and npm deps
-      ${lib.getExe nix-update} "$UPDATE_NIX_ATTR_PATH"
+        # Update elm deps
+        cp "$(nix-build -A "$UPDATE_NIX_ATTR_PATH".src)/web/elm/elm.json" elm.json
+        trap 'rm -rf elm.json registry.dat &> /dev/null' EXIT
+        ${lib.getExe elm2nix} convert > pkgs/by-name/co/concourse/elm-srcs.nix
+        ${lib.getExe nixfmt} pkgs/by-name/co/concourse/elm-srcs.nix
+        ${lib.getExe elm2nix} snapshot
+        cp registry.dat pkgs/by-name/co/concourse/registry.dat
+      '';
+    };
 
-      # Update elm deps
-      cp "$(nix-build -A "$UPDATE_NIX_ATTR_PATH".src)/web/elm/elm.json" elm.json
-      trap 'rm -rf elm.json registry.dat &> /dev/null' EXIT
-      ${lib.getExe elm2nix} convert > pkgs/by-name/co/concourse/elm-srcs.nix
-      ${lib.getExe nixfmt} pkgs/by-name/co/concourse/elm-srcs.nix
-      ${lib.getExe elm2nix} snapshot
-      cp registry.dat pkgs/by-name/co/concourse/registry.dat
-    '';
-  };
-
-  meta = with lib; {
-    homepage = "https://concourse-ci.org";
-    description = "A container-based automation system written in Go.";
-    platforms = lib.platforms.linux ++ lib.platforms.darwin;
-    license = licenses.asl20;
-    maintainers = with maintainers; [ lenianiva ];
-  };
 }
