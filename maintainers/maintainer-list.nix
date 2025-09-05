@@ -14375,7 +14375,7 @@
   };
   lenianiva = {
     name = "Leni Aniva";
-    email = "chrysoberyl@tuta.io";
+    email = "a@leni.sh";
     github = "lenianiva";
     githubId = 107011294;
   };
