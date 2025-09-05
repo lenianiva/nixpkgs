@@ -6,6 +6,8 @@
 }:
 let
   cfg = config.services.concourse-worker;
+  useContainerd = cfg.runtime.type == "containerd";
+  useGuardian = cfg.runtime.type == "guardian";
 in
 {
   meta.maintainers = with lib.maintainers; [ lenianiva ];
@@ -60,6 +62,17 @@ in
         description = "Set to 4 for IPv4 interface, 6 for IPv6";
       };
     };
+    runtime = {
+      type = lib.mkOption {
+        type = lib.types.enum [
+          "containerd"
+          "guardian"
+          "houdini"
+        ];
+        default = "containerd";
+        description = "Container runtimes type. After specifying this, provide the runtime executable path via [Environment Variables](https://concourse-ci.org/concourse-worker.html#configuring-runtimes)";
+      };
+    };
     extra-options = lib.mkOption {
       type = lib.types.str;
       default = "";
@@ -90,9 +103,9 @@ in
     systemd.services = {
       concourse-worker = {
         description = "Concourse CI worker";
+        after = [ "network.target" ];
         wantedBy = [ "multi-user.target" ];
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
+        path = [ ] ++ (lib.optional useContainerd pkgs.containerd);
         serviceConfig = {
           # Worker must be run as root, because it needs to launch containers
           #WorkingDirectory = cfg.work-dir;
@@ -102,7 +115,7 @@ in
           ConfigurationDirectory = "concourse-worker";
           EnvironmentFile = cfg.environmentFile;
           ExecStart = "${cfg.package}/bin/concourse worker ${cfg.extra-options}";
-          Restart = "on-failure";
+          #Restart = "on-failure";
           RestartSec = 15;
           CapabilityBoundingSet = "";
           # Security
@@ -141,6 +154,8 @@ in
           CONCOURSE_BAGGAGECLAIM_BIND_IP = cfg.p2p.bind-ip;
           CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_NAME_PATTERN = cfg.p2p.interface-name-pattern;
           CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_FAMILY = cfg.p2p.interface-family;
+
+          CONCOURSE_RUNTIME = cfg.runtime.type;
         }
         // cfg.environment;
       };

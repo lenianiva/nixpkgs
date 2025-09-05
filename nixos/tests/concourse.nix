@@ -6,9 +6,8 @@
 }:
 let
   concoursePackage = pkgs.concourse;
-  username = "concourse";
-  database = "concourse";
-  password = "mypass";
+  ccusername = "myuser"; # Name of the user in concourse
+  ccpassword = "mypass"; # Password of the user in concourse
   session-signing-key = pkgs.writeTextFile {
     name = "session-signing-key";
     text = ''
@@ -77,6 +76,19 @@ let
       -----END RSA PRIVATE KEY-----
     '';
   };
+  # Networking configurations
+  networking = {
+    useNetworkd = true;
+    useDHCP = false;
+    firewall.enable = false;
+  };
+  networkName = "eth1";
+  serverIP = "10.0.0.1";
+  serverPort = 8080;
+  macAddress = {
+    worker = "02:de:ad:be:ef:01";
+    client = "02:de:ad:be:ef:02";
+  };
 in
 {
   name = concoursePackage.pname;
@@ -85,9 +97,17 @@ in
   ];
 
   nodes = {
+    # Web interface node
     server =
+      let
+        # User and database setup on the server system
+        username = "concourse";
+        database = "concourse";
+        password = "random";
+      in
       { config, pkgs, ... }:
       {
+        virtualisation.vlans = [ 1 ];
         users = {
           users.${config.services.concourse-web.user} = {
             description = "Concourse service";
@@ -104,6 +124,14 @@ in
             ];
           };
         };
+        inherit networking;
+        systemd.network.networks."01-eth1" = {
+          name = networkName;
+          networkConfig = {
+            DHCPServer = true;
+            Address = "${serverIP}/24";
+          };
+        };
         services = {
           openssh.enable = true;
           concourse-web = {
@@ -112,14 +140,15 @@ in
               inherit database password;
               user = username;
             };
+            network.bind-port = serverPort;
             session-signing-key = "${session-signing-key}";
             tsa = {
               host = "web:2222";
               host-key = "${tsa-host-key}";
             };
             environment = {
-              CONCOURSE_ADD_LOCAL_USER = "${username}:${password}";
-              CONCOURSE_MAIN_TEAM_LOCAL_USER = username;
+              CONCOURSE_ADD_LOCAL_USER = "${ccusername}:${ccpassword}";
+              CONCOURSE_MAIN_TEAM_LOCAL_USER = ccusername;
             };
           };
           postgresql = {
@@ -148,6 +177,7 @@ in
     worker =
       { config, pkgs, ... }:
       {
+        virtualisation.vlans = [ 1 ];
         virtualisation.memorySize = 2047;
         services = {
           concourse-worker = {
@@ -155,30 +185,58 @@ in
             tag = "worker1";
             team = "team1";
             tsa = {
-              host = "server:2222";
+              host = "${serverIP}:2222";
               public-key = "${tsa-host-key-pub}";
               worker-private-key = "${worker-key}";
             };
+            runtime = {
+              type = "containerd";
+            };
+            environment = {
+              CONCOURSE_CONTAINERD_BIN = "${pkgs.containerd}";
+            };
+          };
+        };
+        networking = networking // {
+          interfaces.${networkName} = {
+            useDHCP = true;
           };
         };
       };
+    # This instance has the `fly` CLI
     client =
       { config, pkgs, ... }:
       {
+        virtualisation.vlans = [ 1 ];
         environment = {
           variables.EDITOR = "vim";
           systemPackages = [
             pkgs.fly
           ];
         };
+        networking = networking // {
+          interfaces.${networkName} = {
+            useDHCP = true;
+          };
+        };
       };
   };
 
-  testScript = ''
-    start_all()
+  testScript =
+    let
+      target-name = "example";
+    in
+    ''
+      server.start()
+      server.wait_for_unit("concourse-web")
 
-    # Ensure the services are running and not dead
-    server.wait_for_unit("concourse-web")
-    worker.wait_for_unit("concourse-worker")
-  '';
+      worker.start()
+      worker.wait_for_unit("concourse-worker")
+
+      # Login
+      client.start()
+      client.succeed("fly login --target ${target-name} --concourse-url http://${serverIP}:${toString serverPort} --username ${ccusername} --password ${ccpassword}")
+
+      # Send a task and wait until it succeeds
+    '';
 }

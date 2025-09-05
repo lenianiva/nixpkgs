@@ -150,9 +150,11 @@ in
     systemd.services = {
       concourse-web = {
         description = "Concourse CI web";
+        after = [
+          "network.target"
+          "postgresql.target"
+        ];
         wantedBy = [ "multi-user.target" ];
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
         serviceConfig = {
           User = cfg.user;
           WorkingDirectory = "%S/concourse-web";
@@ -162,7 +164,7 @@ in
           ConfigurationDirectory = "concourse-web";
           EnvironmentFile = cfg.environmentFile;
           ExecStart = "${cfg.package}/bin/concourse web --bind-port ${toString cfg.network.bind-port} ${cfg.extra-options}";
-          Restart = "on-failure";
+          #Restart = "on-failure";
           RestartSec = 15;
           CapabilityBoundingSet = "";
           # Security
