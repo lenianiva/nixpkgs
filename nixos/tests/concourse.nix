@@ -224,7 +224,32 @@ in
 
   testScript =
     let
-      target-name = "example";
+      target = "mytarget";
+      pipeline-name = "example";
+      pipeline-example = pkgs.writeTextFile {
+        name = "pipeline-example.yaml";
+        text = ''
+          jobs:
+          - name: hello-world-job
+            plan:
+            - task: hello-world-task
+              config:
+                # Tells Concourse which type of worker this task should run on
+                platform: linux
+                # This is one way of telling Concourse which container image to use for a
+                # task. We'll explain this more when talking about resources
+                image_resource:
+                  type: registry-image
+                  source:
+                    repository: busybox # images are pulled from docker hub by default
+                    tag: latest
+                # The command Concourse will run inside the container
+                # echo "Hello world!"
+                run:
+                  path: echo
+                  args: ["Hello world!"]
+        '';
+      };
     in
     ''
       server.start()
@@ -235,8 +260,15 @@ in
 
       # Login
       client.start()
-      client.succeed("fly login --target ${target-name} --concourse-url http://${serverIP}:${toString serverPort} --username ${ccusername} --password ${ccpassword}")
+      client.succeed("fly login --target ${target} --concourse-url http://${serverIP}:${toString serverPort} --username ${ccusername} --password ${ccpassword}")
+
+      client.succeed("fly -t ${target} status")
 
       # Send a task and wait until it succeeds
+      client.succeed("fly -t ${target} set-pipeline -p ${pipeline-name} -c ${pipeline-example} --non-interactive")
+
+      client.succeed("fly -t ${target} unpause-pipeline -p ${pipeline-name}")
+
+      client.succeed("fly -t ${target} trigger-job --job ${pipeline-name}/hello-world-job --watch")
     '';
 }
