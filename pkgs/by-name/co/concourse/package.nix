@@ -130,22 +130,22 @@ stdenv.mkDerivation rec {
     cp -r ${binary-tar}/resource-types $out/resource-types
   '';
 
-    passthru = {
-      tests = nixosTests.concourse;
-      updateScript = writeShellScript "update-concourse" ''
-        set -eu -o pipefail
+  passthru = {
+    tests = nixosTests.concourse;
+    updateScript = writeShellScript "update-concourse" ''
+      set -eu -o pipefail
 
-        # Update version, src and npm deps
-        ${lib.getExe nix-update} "$UPDATE_NIX_ATTR_PATH"
+      # Update version, src and npm deps
+      ${lib.getExe nix-update} "$UPDATE_NIX_ATTR_PATH"
 
-        # Update elm deps
-        cp "$(nix-build -A "$UPDATE_NIX_ATTR_PATH".src)/web/elm/elm.json" elm.json
-        trap 'rm -rf elm.json registry.dat &> /dev/null' EXIT
-        ${lib.getExe elm2nix} convert > pkgs/by-name/co/concourse/elm-srcs.nix
-        ${lib.getExe nixfmt} pkgs/by-name/co/concourse/elm-srcs.nix
-        ${lib.getExe elm2nix} snapshot
-        cp registry.dat pkgs/by-name/co/concourse/registry.dat
-      '';
-    };
+      # Update elm deps
+      cp "$(nix-build -A "$UPDATE_NIX_ATTR_PATH".src)/web/elm/elm.json" elm.json
+      trap 'rm -rf elm.json registry.dat &> /dev/null' EXIT
+      ${lib.getExe elm2nix} convert > pkgs/by-name/co/concourse/elm-srcs.nix
+      ${lib.getExe nixfmt} pkgs/by-name/co/concourse/elm-srcs.nix
+      ${lib.getExe elm2nix} snapshot
+      cp registry.dat pkgs/by-name/co/concourse/registry.dat
+    '';
+  };
 
 }
