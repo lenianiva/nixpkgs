@@ -98,7 +98,9 @@ stdenv.mkDerivation rec {
     vendorHash = "sha256-2busKAFaQYE82XKCAx8BGOMjjs8WzqIxdpz+J45maoc=";
     inherit src;
 
-    subPackages = [ "cmd/concourse" ];
+    subPackages = [
+      "cmd/concourse"
+    ];
     ldflags = [
       "-s"
       "-w"
@@ -115,12 +117,6 @@ stdenv.mkDerivation rec {
   binary-tar = fetchTarball {
     url = "https://github.com/concourse/concourse/releases/download/v${version}/concourse-${version}-linux-amd64.tgz";
     sha256 = "0f0kblsig0d3j4swynxj16pa5iycxa92bd4pm5vzxqr3nn4w2ncl";
-  };
-  resource-types-registry-image = dockerTools.pullImage {
-    imageName = "concourse/registry-image-resource";
-    imageDigest = "sha256:27559348791ac3099f7ed1954485ce61eb92d0f1f356110635fd878ba5cb0177";
-    finalImageTag = "1.13";
-    sha256 = "sha256-iNaF2UucJ9Jfb1LYHhsOReX/1owoa/H7LSdXnO9iCxg=";
   };
   dontConfigure = true;
   dontBuild = true;
