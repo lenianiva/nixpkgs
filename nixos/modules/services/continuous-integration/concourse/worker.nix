@@ -15,6 +15,11 @@ in
   options.services.concourse-worker = {
     enable = lib.mkEnableOption "A container-based automation system written in Go. (The worker part)";
     package = lib.mkPackageOption pkgs "concourse" { };
+    auto-restart = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Automatically restart failed servers";
+    };
     tag = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -29,6 +34,11 @@ in
       type = lib.types.str;
       default = "/var/lib/concourse";
       description = "Work directory, which should be backed by sufficient storage.";
+    };
+    resource-types = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Path to advertised resource types";
     };
     tsa = {
       host = lib.mkOption {
@@ -69,8 +79,18 @@ in
           "guardian"
           "houdini"
         ];
-        default = "containerd";
+        default = "guardian";
         description = "Container runtimes type. After specifying this, provide the runtime executable path via [Environment Variables](https://concourse-ci.org/concourse-worker.html#configuring-runtimes)";
+      };
+      bin = lib.mkOption {
+        type = lib.types.str;
+        default = "${pkgs.guardian}/bin/gdn";
+        description = "Path to runtime server executable";
+      };
+      config = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Path to a config file for the backend";
       };
     };
     extra-options = lib.mkOption {
@@ -105,7 +125,6 @@ in
         description = "Concourse CI worker";
         after = [ "network.target" ];
         wantedBy = [ "multi-user.target" ];
-        path = [ ] ++ (lib.optional useContainerd pkgs.containerd);
         serviceConfig = {
           # Worker must be run as root, because it needs to launch containers
           #WorkingDirectory = cfg.work-dir;
@@ -115,7 +134,7 @@ in
           ConfigurationDirectory = "concourse-worker";
           EnvironmentFile = cfg.environmentFile;
           ExecStart = "${cfg.package}/bin/concourse worker ${cfg.extra-options}";
-          #Restart = "on-failure";
+          Restart = if cfg.auto-restart then "on-failure" else "no";
           RestartSec = 15;
           CapabilityBoundingSet = "";
           # Security
@@ -156,6 +175,11 @@ in
           CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_FAMILY = cfg.p2p.interface-family;
 
           CONCOURSE_RUNTIME = cfg.runtime.type;
+          CONCOURSE_GARDEN_BIN = cfg.runtime.bin;
+          CONCOURSE_GARDEN_CONFIG = cfg.runtime.config;
+          CONCOURSE_CONTAINERD_BIN = cfg.runtime.bin;
+          CONCOURSE_CONTAINERD_CONFIG = cfg.runtime.config;
+          CONCOURSE_RESOURCE_TYPES = lib.defaultTo "${cfg.package}/resource-types" cfg.resource-types;
         }
         // cfg.environment;
       };

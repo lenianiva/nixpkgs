@@ -12,7 +12,7 @@ in
 
   options.services.concourse-web = {
     enable = lib.mkEnableOption "A container-based automation system written in Go. (The web server part)";
-    package = lib.mkPackageOption pkgs "concourse" { };
+    package = lib.mkPackageOption pkgs [ "concourse" "executable" ] { };
     user = lib.mkOption {
       type = lib.types.str;
       default = "concourse";
@@ -22,6 +22,11 @@ in
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "Path to session signing private key";
+    };
+    auto-restart = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Automatically restart failed servers";
     };
     network = {
       peer-address = lib.mkOption {
@@ -94,10 +99,15 @@ in
       };
     };
     tsa = {
-      host = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Host specification (e.g. web:2222)";
+      bind-ip = lib.mkOption {
+        type = lib.types.str;
+        default = "0.0.0.0";
+        description = "TSA binding ip";
+      };
+      bind-port = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = 2222;
+        description = "TSA binding port";
       };
       host-key = lib.mkOption {
         type = lib.types.str;
@@ -163,8 +173,8 @@ in
           UMask = "0007";
           ConfigurationDirectory = "concourse-web";
           EnvironmentFile = cfg.environmentFile;
-          ExecStart = "${cfg.package}/bin/concourse web --bind-port ${toString cfg.network.bind-port} ${cfg.extra-options}";
-          #Restart = "on-failure";
+          ExecStart = "${cfg.package}/bin/concourse web ${cfg.extra-options}";
+          Restart = if cfg.auto-restart then "on-failure" else "no";
           RestartSec = 15;
           CapabilityBoundingSet = "";
           # Security
@@ -192,21 +202,23 @@ in
           SystemCallFilter = "~@clock @privileged @cpu-emulation @debug @keyring @module @mount @obsolete @raw-io @reboot @setuid @swap";
         };
         environment = {
+          CONCOURSE_BIND_PORT = toString cfg.network.bind-port;
+          CONCOURSE_PEER_ADDRESS = cfg.network.peer-address;
+          CONCOURSE_EXTERNAL_URL = cfg.network.external-url;
+          CONCOURSE_API_MAX_CONNS = lib.mapNullable toString cfg.network.api-max-conns;
+          CONCOURSE_BACKEND_MAX_CONNS = lib.mapNullable toString cfg.network.backend-max-conns;
+          CONCOURSE_CLUSTER_NAME = cfg.network.cluster-name;
+
           CONCOURSE_POSTGRES_PORT = toString cfg.postgres.port;
           CONCOURSE_POSTGRES_SOCKET = cfg.postgres.socket;
           CONCOURSE_POSTGRES_DATABASE = cfg.postgres.database;
           CONCOURSE_POSTGRES_USER = cfg.postgres.user;
           CONCOURSE_POSTGRES_PASSWORD = cfg.postgres.password;
           CONCOURSE_SESSION_SIGNING_KEY = cfg.session-signing-key;
-          CONCOURSE_TSA_HOST = cfg.tsa.host;
+          CONCOURSE_TSA_BIND_IP = cfg.tsa.bind-ip;
+          CONCOURSE_TSA_BIND_PORT = toString cfg.tsa.bind-port;
           CONCOURSE_TSA_HOST_KEY = cfg.tsa.host-key;
           CONCOURSE_TSA_AUTHORIZED_KEYS = cfg.tsa.authorized-keys;
-
-          CONCOURSE_PEER_ADDRESS = cfg.network.peer-address;
-          CONCOURSE_EXTERNAL_URL = cfg.network.external-url;
-          CONCOURSE_API_MAX_CONNS = lib.mapNullable toString cfg.network.api-max-conns;
-          CONCOURSE_BACKEND_MAX_CONNS = lib.mapNullable toString cfg.network.backend-max-conns;
-          CONCOURSE_CLUSTER_NAME = cfg.network.cluster-name;
 
           CONCOURSE_ENABLE_P2P_VOLUME_STREAMING = toString cfg.network.p2p-volume-streaming;
         }

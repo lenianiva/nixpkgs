@@ -82,9 +82,10 @@ let
     useDHCP = false;
     firewall.enable = false;
   };
-  networkName = "eth1";
+  interface = "eth1";
   serverIP = "10.0.0.1";
   serverPort = 8080;
+  serverTSAPort = 2222;
   macAddress = {
     worker = "02:de:ad:be:ef:01";
     client = "02:de:ad:be:ef:02";
@@ -107,7 +108,6 @@ in
       in
       { config, pkgs, ... }:
       {
-        virtualisation.vlans = [ 1 ];
         users = {
           users.${config.services.concourse-web.user} = {
             description = "Concourse service";
@@ -124,14 +124,6 @@ in
             ];
           };
         };
-        inherit networking;
-        systemd.network.networks."01-eth1" = {
-          name = networkName;
-          networkConfig = {
-            DHCPServer = true;
-            Address = "${serverIP}/24";
-          };
-        };
         services = {
           openssh.enable = true;
           concourse-web = {
@@ -140,11 +132,14 @@ in
               inherit database password;
               user = username;
             };
+            auto-restart = false;
             network.bind-port = serverPort;
             session-signing-key = "${session-signing-key}";
             tsa = {
-              host = "web:2222";
+              bind-ip = "0.0.0.0";
+              bind-port = serverTSAPort;
               host-key = "${tsa-host-key}";
+              authorized-keys = "${worker-key-pub}";
             };
             environment = {
               CONCOURSE_ADD_LOCAL_USER = "${ccusername}:${ccpassword}";
@@ -173,33 +168,55 @@ in
             '';
           };
         };
+        virtualisation.vlans = [ 1 ];
+        inherit networking;
+        systemd.network.networks."01-eth1" = {
+          name = interface;
+          networkConfig = {
+            DHCPServer = true;
+            Address = "${serverIP}/24";
+          };
+          dhcpServerStaticLeases = [
+            {
+              MACAddress = macAddress.worker;
+              Address = "10.0.0.10";
+            }
+          ];
+        };
       };
     worker =
       { config, pkgs, ... }:
       {
-        virtualisation.vlans = [ 1 ];
         virtualisation.memorySize = 2047;
         services = {
           concourse-worker = {
             enable = true;
+            auto-restart = false;
             tag = "worker1";
             team = "team1";
             tsa = {
-              host = "${serverIP}:2222";
+              host = "${serverIP}:${toString serverTSAPort}";
               public-key = "${tsa-host-key-pub}";
               worker-private-key = "${worker-key}";
             };
             runtime = {
-              type = "containerd";
+              #type = "containerd";
+              #bin = "${pkgs.containerd}/bin/containerd";
             };
             environment = {
-              CONCOURSE_CONTAINERD_BIN = "${pkgs.containerd}";
+              #CONCOURSE_CONTAINERD_EXTERNAL_IP = "0.0.0.0";
+              #CONCOURSE_CONTAINERD_DNS_SERVER = "8.8.8.8";
+              #CONCOURSE_CONTAINERD_DNS_PROXY_ENABLE = "true";
+              #CONCOURSE_CONTAINERD_NETWORK_POOL = "0.0.0.0/16";
             };
           };
         };
+        virtualisation.vlans = [ 1 ];
+        systemd.network.networks."40-eth1".dhcpV4Config.ClientIdentifier = "mac";
         networking = networking // {
-          interfaces.${networkName} = {
+          interfaces.${interface} = {
             useDHCP = true;
+            macAddress = macAddress.worker;
           };
         };
       };
@@ -207,15 +224,15 @@ in
     client =
       { config, pkgs, ... }:
       {
-        virtualisation.vlans = [ 1 ];
         environment = {
           variables.EDITOR = "vim";
           systemPackages = [
             pkgs.fly
           ];
         };
+        virtualisation.vlans = [ 1 ];
         networking = networking // {
-          interfaces.${networkName} = {
+          interfaces.${interface} = {
             useDHCP = true;
           };
         };
@@ -257,12 +274,15 @@ in
 
       worker.start()
       worker.wait_for_unit("concourse-worker")
+      worker.sleep(1)
+      worker.require_unit_state("concourse-worker")
 
       # Login
       client.start()
       client.succeed("fly login --target ${target} --concourse-url http://${serverIP}:${toString serverPort} --username ${ccusername} --password ${ccpassword}")
 
       client.succeed("fly -t ${target} status")
+      client.succeed("fly -t ${target} workers -d")
 
       # Send a task and wait until it succeeds
       client.succeed("fly -t ${target} set-pipeline -p ${pipeline-name} -c ${pipeline-example} --non-interactive")
