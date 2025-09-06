@@ -14,6 +14,7 @@
   nixosTests,
   dockerTools,
   glibc,
+  cni-plugins,
 }:
 
 let
@@ -135,6 +136,7 @@ stdenv.mkDerivation rec {
   installPhase = ''
     mkdir -p $out/bin
     cp ${executable}/bin/concourse $out/bin/
+    cp ${cni-plugins}/bin/* $out/bin
     cp -r ${binary-tar}/resource-types $out/resource-types
   '';
 
