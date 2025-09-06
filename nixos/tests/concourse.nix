@@ -8,6 +8,8 @@ let
   concoursePackage = pkgs.concourse;
   ccusername = "myuser"; # Name of the user in concourse
   ccpassword = "mypass"; # Password of the user in concourse
+
+  # Generated some 1024 bit keys for demo
   session-signing-key = pkgs.writeTextFile {
     name = "session-signing-key";
     text = ''
@@ -83,8 +85,12 @@ let
     firewall.enable = false;
   };
   interface = "eth1";
-  serverIP = "10.0.0.1";
+  ip = {
+    server = "10.0.0.1";
+    worker = "10.0.0.10";
+  };
   serverPort = 8080;
+  dockerPort = 8082;
   serverTSAPort = 2222;
   macAddress = {
     worker = "02:de:ad:be:ef:01";
@@ -167,6 +173,12 @@ in
               alter user ${username} with password '${password}';
             '';
           };
+          dockerRegistry = {
+            enable = true;
+            port = dockerPort;
+            listenAddress = "0.0.0.0";
+            openFirewall = true;
+          };
         };
         virtualisation.vlans = [ 1 ];
         inherit networking;
@@ -174,12 +186,12 @@ in
           name = interface;
           networkConfig = {
             DHCPServer = true;
-            Address = "${serverIP}/24";
+            Address = "${ip.server}/24";
           };
           dhcpServerStaticLeases = [
             {
               MACAddress = macAddress.worker;
-              Address = "10.0.0.10";
+              Address = ip.worker;
             }
           ];
         };
@@ -192,22 +204,22 @@ in
           concourse-worker = {
             enable = true;
             auto-restart = false;
-            tag = "worker1";
-            team = "team1";
             tsa = {
-              host = "${serverIP}:${toString serverTSAPort}";
+              host = "${ip.server}:${toString serverTSAPort}";
               public-key = "${tsa-host-key-pub}";
               worker-private-key = "${worker-key}";
             };
             runtime = {
-              #type = "containerd";
-              #bin = "${pkgs.containerd}/bin/containerd";
+              type = "containerd";
+              #config = "${guardian-config}";
             };
             environment = {
-              #CONCOURSE_CONTAINERD_EXTERNAL_IP = "0.0.0.0";
-              #CONCOURSE_CONTAINERD_DNS_SERVER = "8.8.8.8";
+              CONCOURSE_BIND_IP = "127.0.0.1";
+              CONCOURSE_BIND_PORT = "9001";
+              #CONCOURSE_GARDEN_EXTERNAL_IP = ip.worker;
+              CONCOURSE_CONTAINERD_EXTERNAL_IP = ip.worker;
               #CONCOURSE_CONTAINERD_DNS_PROXY_ENABLE = "true";
-              #CONCOURSE_CONTAINERD_NETWORK_POOL = "0.0.0.0/16";
+              #CONCOURSE_CONTAINERD_ALLOW_HOST_ACCESS = "true";
             };
           };
         };
@@ -225,12 +237,15 @@ in
       { config, pkgs, ... }:
       {
         environment = {
-          variables.EDITOR = "vim";
           systemPackages = [
             pkgs.fly
           ];
         };
         virtualisation.vlans = [ 1 ];
+        virtualisation.docker = {
+          enable = true;
+          extraOptions = "--insecure-registry ${ip.server}:${toString dockerPort}";
+        };
         networking = networking // {
           interfaces.${interface} = {
             useDHCP = true;
@@ -241,6 +256,17 @@ in
 
   testScript =
     let
+      example-image = pkgs.dockerTools.buildImage {
+        name = "busybox";
+        copyToRoot = pkgs.buildEnv {
+          name = "image-root";
+          pathsToLink = [ "/bin" ];
+          paths = [
+            pkgs.busybox
+          ];
+        };
+      };
+      image-tag = "hi";
       target = "mytarget";
       pipeline-name = "example";
       pipeline-example = pkgs.writeTextFile {
@@ -253,15 +279,11 @@ in
               config:
                 # Tells Concourse which type of worker this task should run on
                 platform: linux
-                # This is one way of telling Concourse which container image to use for a
-                # task. We'll explain this more when talking about resources
                 image_resource:
                   type: registry-image
                   source:
-                    repository: busybox # images are pulled from docker hub by default
+                    repository: ${ip.server}:${toString dockerPort}/${image-tag}
                     tag: latest
-                # The command Concourse will run inside the container
-                # echo "Hello world!"
                 run:
                   path: echo
                   args: ["Hello world!"]
@@ -271,24 +293,34 @@ in
     ''
       server.start()
       server.wait_for_unit("concourse-web")
+      server.wait_for_open_port(${toString serverPort})
 
       worker.start()
       worker.wait_for_unit("concourse-worker")
       worker.sleep(1)
       worker.require_unit_state("concourse-worker")
 
-      # Login
       client.start()
-      client.succeed("fly login --target ${target} --concourse-url http://${serverIP}:${toString serverPort} --username ${ccusername} --password ${ccpassword}")
 
+      # Login to concourse
+      client.succeed("fly login --target ${target} --concourse-url http://${ip.server}:${toString serverPort} --username ${ccusername} --password ${ccpassword}")
       client.succeed("fly -t ${target} status")
       client.succeed("fly -t ${target} workers -d")
+
+      # Upload an image to the mockup registry
+      client.wait_for_unit("docker.service")
+      client.succeed("docker import ${example-image} ${image-tag}")
+      client.succeed("docker tag ${image-tag} ${ip.server}:${toString dockerPort}/${image-tag}")
+      server.wait_for_unit("docker-registry.service")
+      server.wait_for_open_port(${toString dockerPort})
+      client.succeed("docker push ${ip.server}:${toString dockerPort}/${image-tag}")
 
       # Send a task and wait until it succeeds
       client.succeed("fly -t ${target} set-pipeline -p ${pipeline-name} -c ${pipeline-example} --non-interactive")
 
       client.succeed("fly -t ${target} unpause-pipeline -p ${pipeline-name}")
 
+      worker.require_unit_state("concourse-worker")
       client.succeed("fly -t ${target} trigger-job --job ${pipeline-name}/hello-world-job --watch")
     '';
 }
