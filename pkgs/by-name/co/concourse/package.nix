@@ -13,6 +13,7 @@
   nixfmt,
   nixosTests,
   dockerTools,
+  glibc,
 }:
 
 let
@@ -112,7 +113,18 @@ stdenv.mkDerivation rec {
     '';
 
     doCheck = false; # Tests broken
-
+  };
+  init = stdenv.mkDerivation {
+    pname = "init";
+    inherit version;
+    src = "${src}/cmd/init";
+    buildInputs = [
+      glibc.static
+    ];
+    buildPhase = ''
+      mkdir -p $out
+      gcc -O2 -static -o $out/init init.c
+    '';
   };
   binary-tar = fetchTarball {
     url = "https://github.com/concourse/concourse/releases/download/v${version}/concourse-${version}-linux-amd64.tgz";

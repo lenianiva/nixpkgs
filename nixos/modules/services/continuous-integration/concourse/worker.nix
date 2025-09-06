@@ -83,8 +83,8 @@ in
         description = "Container runtimes type. After specifying this, provide the runtime executable path via [Environment Variables](https://concourse-ci.org/concourse-worker.html#configuring-runtimes)";
       };
       bin = lib.mkOption {
-        type = lib.types.str;
-        default = "${pkgs.guardian}/bin/gdn";
+        type = lib.types.nullOr lib.types.str;
+        default = null;
         description = "Path to runtime server executable";
       };
       config = lib.mkOption {
@@ -125,6 +125,7 @@ in
         description = "Concourse CI worker";
         after = [ "network.target" ];
         wantedBy = [ "multi-user.target" ];
+        path = [ pkgs.util-linux pkgs.iptables ];
         serviceConfig = {
           # Worker must be run as root, because it needs to launch containers
           #WorkingDirectory = cfg.work-dir;
@@ -136,7 +137,7 @@ in
           ExecStart = "${cfg.package}/bin/concourse worker ${cfg.extra-options}";
           Restart = if cfg.auto-restart then "on-failure" else "no";
           RestartSec = 15;
-          CapabilityBoundingSet = "";
+          #CapabilityBoundingSet = "";
           # Security
           NoNewPrivileges = true;
           # Sandboxing
@@ -150,8 +151,8 @@ in
           ProtectKernelTunables = true;
           ProtectKernelModules = true;
           ProtectKernelLogs = true;
-          ProtectControlGroups = true;
-          RestrictAddressFamilies = [ "AF_UNIX AF_INET AF_INET6" ];
+          #ProtectControlGroups = true;
+          #RestrictAddressFamilies = [ "AF_UNIX AF_INET AF_INET6" ];
           LockPersonality = true;
           MemoryDenyWriteExecute = true;
           RestrictRealtime = true;
@@ -175,11 +176,16 @@ in
           CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_FAMILY = cfg.p2p.interface-family;
 
           CONCOURSE_RUNTIME = cfg.runtime.type;
-          CONCOURSE_GARDEN_BIN = cfg.runtime.bin;
-          CONCOURSE_GARDEN_CONFIG = cfg.runtime.config;
-          CONCOURSE_CONTAINERD_BIN = cfg.runtime.bin;
-          CONCOURSE_CONTAINERD_CONFIG = cfg.runtime.config;
           CONCOURSE_RESOURCE_TYPES = lib.defaultTo "${cfg.package}/resource-types" cfg.resource-types;
+        }
+        // lib.ifEnable useContainerd {
+          CONCOURSE_CONTAINERD_BIN = lib.defaultTo "${pkgs.containerd}/bin/containerd" cfg.runtime.bin;
+          CONCOURSE_CONTAINERD_INIT_BIN = "${cfg.package.init}/init";
+          CONCOURSE_CONTAINERD_CONFIG = cfg.runtime.config;
+        }
+        // lib.ifEnable useGuardian {
+          CONCOURSE_GARDEN_BIN = lib.defaultTo "${pkgs.guardian}/bin/gdn" cfg.runtime.bin;
+          CONCOURSE_GARDEN_CONFIG = cfg.runtime.config;
         }
         // cfg.environment;
       };
