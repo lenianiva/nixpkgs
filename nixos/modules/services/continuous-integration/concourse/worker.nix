@@ -79,13 +79,18 @@ in
           "guardian"
           "houdini"
         ];
-        default = "guardian";
-        description = "Container runtimes type. After specifying this, provide the runtime executable path via [Environment Variables](https://concourse-ci.org/concourse-worker.html#configuring-runtimes)";
+        default = "containerd";
+        description = "Container runtimes type.";
       };
       bin = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = "Path to runtime server executable";
+      };
+      dns-server = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "DNS Server for the runtime";
       };
       config = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -93,7 +98,7 @@ in
         description = "Path to a config file for the backend";
       };
     };
-    extra-options = lib.mkOption {
+    args = lib.mkOption {
       type = lib.types.str;
       default = "";
       description = "Extra options to pass to concourse executable";
@@ -123,44 +128,65 @@ in
     systemd.services = {
       concourse-worker = {
         description = "Concourse CI worker";
-        after = [ "network.target" ];
+        after = [
+          "network.target"
+          "local-fs.target"
+          "dbus.service"
+        ];
         wantedBy = [ "multi-user.target" ];
-        path = [ pkgs.util-linux pkgs.iptables ];
+        path = [
+          pkgs.util-linux
+          pkgs.iptables
+          pkgs.gnutar
+          pkgs.gzip
+          pkgs.runc
+        ]
+        # From `containerd`
+        ++ lib.optional config.boot.zfs.enabled config.boot.zfs.package;
         serviceConfig = {
           # Worker must be run as root, because it needs to launch containers
           #WorkingDirectory = cfg.work-dir;
           StateDirectory = cfg.work-dir;
-          StateDirectoryMode = "0700";
-          UMask = "0007";
+          StateDirectoryMode = "0777";
+          #UMask = "0007";
           ConfigurationDirectory = "concourse-worker";
           EnvironmentFile = cfg.environmentFile;
-          ExecStart = "${cfg.package}/bin/concourse worker ${cfg.extra-options}";
+          ExecStart = "${cfg.package}/bin/concourse worker ${cfg.args}";
           Restart = if cfg.auto-restart then "on-failure" else "no";
           RestartSec = 15;
+
+          # From containerd
+          Delegate = "yes";
+          LimitNPROC = "infinity";
+          LimitCORE = "infinity";
+          TasksMax = "infinity";
+          OOMScoreAdjust = "-999";
           #CapabilityBoundingSet = "";
           # Security
-          NoNewPrivileges = true;
-          # Sandboxing
-          ProtectSystem = "full";
-          ProtectHome = true;
-          PrivateTmp = true;
-          PrivateDevices = true;
-          PrivateUsers = true;
-          ProtectHostname = true;
-          ProtectClock = true;
-          ProtectKernelTunables = true;
-          ProtectKernelModules = true;
-          ProtectKernelLogs = true;
-          #ProtectControlGroups = true;
+          #NoNewPrivileges = true;
+          ## Sandboxing
+          #ProtectSystem = "full";
+          #ProtectHome = true;
+          #PrivateTmp = true;
+          #PrivateDevices = true;
+          #PrivateUsers = true;
+          #ProtectHostname = true;
+          #ProtectClock = true;
+          #ProtectKernelTunables = true;
+          #ProtectKernelModules = true;
+          #ProtectKernelLogs = true;
+          #LockPersonality = true;
+          #MemoryDenyWriteExecute = true;
+          #RestrictRealtime = true;
+          #RestrictSUIDSGID = true;
+          #PrivateMounts = true;
+
           #RestrictAddressFamilies = [ "AF_UNIX AF_INET AF_INET6" ];
-          LockPersonality = true;
-          MemoryDenyWriteExecute = true;
-          RestrictRealtime = true;
-          RestrictSUIDSGID = true;
-          PrivateMounts = true;
-          # System Call Filtering
-          SystemCallArchitectures = "native";
-          SystemCallFilter = "~@clock @privileged @cpu-emulation @debug @keyring @module @mount @obsolete @raw-io @reboot @setuid @swap";
+
+          # Do not filter control groups and system calls since this needs to run a container runtime
+          #ProtectControlGroups = true;
+          #SystemCallArchitectures = "native";
+          #SystemCallFilter = "~@clock @privileged @cpu-emulation @debug @keyring @module @mount @obsolete @raw-io @reboot @setuid @swap";
         };
         environment = {
           CONCOURSE_WORK_DIR = cfg.work-dir;
@@ -176,16 +202,18 @@ in
           CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_FAMILY = cfg.p2p.interface-family;
 
           CONCOURSE_RUNTIME = cfg.runtime.type;
-          CONCOURSE_RESOURCE_TYPES = lib.defaultTo "${cfg.package}/resource-types" cfg.resource-types;
+          CONCOURSE_RESOURCE_TYPES = lib.defaultTo "${pkgs.concourse.binary-tar}/resource-types" cfg.resource-types;
         }
         // lib.ifEnable useContainerd {
           CONCOURSE_CONTAINERD_BIN = lib.defaultTo "${pkgs.containerd}/bin/containerd" cfg.runtime.bin;
-          CONCOURSE_CONTAINERD_INIT_BIN = "${cfg.package.init}/init";
+          CONCOURSE_CONTAINERD_INIT_BIN = "${pkgs.concourse.init}/init";
           CONCOURSE_CONTAINERD_CONFIG = cfg.runtime.config;
+          CONCOURSE_CONTAINERD_DNS_SERVER = cfg.runtime.dns-server;
         }
         // lib.ifEnable useGuardian {
-          CONCOURSE_GARDEN_BIN = lib.defaultTo "${pkgs.guardian}/bin/gdn" cfg.runtime.bin;
+          CONCOURSE_GARDEN_BIN = cfg.runtime.bin;
           CONCOURSE_GARDEN_CONFIG = cfg.runtime.config;
+          CONCOURSE_GARDEN_DNS_SERVER = cfg.runtime.dns-server;
         }
         // cfg.environment;
       };

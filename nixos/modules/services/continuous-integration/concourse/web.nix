@@ -119,7 +119,7 @@ in
         description = "Path to TSA authorized keys";
       };
     };
-    extra-options = lib.mkOption {
+    args = lib.mkOption {
       type = lib.types.str;
       default = "";
       description = "Extra options to pass to concourse executable";
@@ -173,7 +173,7 @@ in
           UMask = "0007";
           ConfigurationDirectory = "concourse-web";
           EnvironmentFile = cfg.environmentFile;
-          ExecStart = "${cfg.package}/bin/concourse web ${cfg.extra-options}";
+          ExecStart = "${cfg.package}/bin/concourse web ${cfg.args}";
           Restart = if cfg.auto-restart then "on-failure" else "no";
           RestartSec = 15;
           CapabilityBoundingSet = "";
