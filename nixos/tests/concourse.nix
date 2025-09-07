@@ -199,7 +199,6 @@ in
     worker =
       { config, pkgs, ... }:
       {
-        virtualisation.memorySize = 2047;
         services = {
           concourse-worker = {
             enable = true;
@@ -223,6 +222,8 @@ in
             };
           };
         };
+        virtualisation.containerd.enable = true;
+        virtualisation.memorySize = 2047;
         virtualisation.vlans = [ 1 ];
         systemd.network.networks."40-eth1".dhcpV4Config.ClientIdentifier = "mac";
         networking = networking // {
@@ -256,17 +257,14 @@ in
 
   testScript =
     let
-      example-image = pkgs.dockerTools.buildImage {
-        name = "busybox";
-        copyToRoot = pkgs.buildEnv {
-          name = "image-root";
-          pathsToLink = [ "/bin" ];
-          paths = [
-            pkgs.busybox
-          ];
-        };
-      };
+      image-name = "busybox";
       image-tag = "hi";
+      image-id = "${ip.server}:${toString dockerPort}/${image-name}";
+      example-image = pkgs.dockerTools.streamLayeredImage {
+        name = image-name;
+        tag = image-tag;
+        contents = [ pkgs.busybox ];
+      };
       target = "mytarget";
       pipeline-name = "example";
       pipeline-example = pkgs.writeTextFile {
@@ -282,8 +280,8 @@ in
                 image_resource:
                   type: registry-image
                   source:
-                    repository: ${ip.server}:${toString dockerPort}/${image-tag}
-                    tag: latest
+                    repository: ${image-id}
+                    tag: ${image-tag}
                 run:
                   path: echo
                   args: ["Hello world!"]
@@ -296,9 +294,6 @@ in
       server.wait_for_open_port(${toString serverPort})
 
       worker.start()
-      worker.wait_for_unit("concourse-worker")
-      worker.sleep(1)
-      worker.require_unit_state("concourse-worker")
 
       client.start()
 
@@ -309,11 +304,14 @@ in
 
       # Upload an image to the mockup registry
       client.wait_for_unit("docker.service")
-      client.succeed("docker import ${example-image} ${image-tag}")
-      client.succeed("docker tag ${image-tag} ${ip.server}:${toString dockerPort}/${image-tag}")
+      server.wait_for_open_port(${toString dockerPort})
+      client.succeed("${example-image} | docker image load")
+      client.succeed("docker tag ${image-name}:${image-tag} ${image-id}:${image-tag}")
       server.wait_for_unit("docker-registry.service")
       server.wait_for_open_port(${toString dockerPort})
-      client.succeed("docker push ${ip.server}:${toString dockerPort}/${image-tag}")
+      client.succeed("docker push ${image-id}:${image-tag}")
+
+      worker.wait_for_unit("concourse-worker")
 
       # Send a task and wait until it succeeds
       client.succeed("fly -t ${target} set-pipeline -p ${pipeline-name} -c ${pipeline-example} --non-interactive")

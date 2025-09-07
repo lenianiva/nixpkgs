@@ -14,7 +14,7 @@ in
 
   options.services.concourse-worker = {
     enable = lib.mkEnableOption "A container-based automation system written in Go. (The worker part)";
-    package = lib.mkPackageOption pkgs "concourse" { };
+    package = lib.mkPackageOption pkgs [ "concourse" "executable" ] { };
     auto-restart = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -209,6 +209,7 @@ in
           CONCOURSE_CONTAINERD_INIT_BIN = "${pkgs.concourse.init}/init";
           CONCOURSE_CONTAINERD_CONFIG = cfg.runtime.config;
           CONCOURSE_CONTAINERD_DNS_SERVER = cfg.runtime.dns-server;
+          CONCOURSE_CONTAINERD_CNI_PLUGINS_DIR = "${pkgs.cni-plugins}/bin";
         }
         // lib.ifEnable useGuardian {
           CONCOURSE_GARDEN_BIN = cfg.runtime.bin;
