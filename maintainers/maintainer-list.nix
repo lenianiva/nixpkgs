@@ -14378,6 +14378,12 @@
     githubId = 31388299;
     name = "Leonardo Eugênio";
   };
+  lenianiva = {
+    name = "Leni Aniva";
+    email = "a@leni.sh";
+    github = "lenianiva";
+    githubId = 107011294;
+  };
   lenivaya = {
     name = "Danylo Osipchuk";
     email = "danylo.osipchuk@proton.me";
