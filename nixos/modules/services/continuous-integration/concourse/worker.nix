@@ -202,7 +202,7 @@ in
           CONCOURSE_BAGGAGECLAIM_P2P_INTERFACE_FAMILY = cfg.p2p.interface-family;
 
           CONCOURSE_RUNTIME = cfg.runtime.type;
-          CONCOURSE_RESOURCE_TYPES = lib.defaultTo "${pkgs.concourse.binary-tar}/resource-types" cfg.resource-types;
+          CONCOURSE_RESOURCE_TYPES = lib.defaultTo "${pkgs.concourse.resource-types}" cfg.resource-types;
         }
         // lib.ifEnable useContainerd {
           CONCOURSE_CONTAINERD_BIN = lib.defaultTo "${pkgs.containerd}/bin/containerd" cfg.runtime.bin;
