@@ -131,9 +131,9 @@ stdenv.mkDerivation rec {
     pname = "resource-types";
     inherit version;
     src = fetchTarball {
-        url = "https://github.com/concourse/concourse/releases/download/v${version}/concourse-${version}-linux-amd64.tgz";
-        sha256 = "0f0kblsig0d3j4swynxj16pa5iycxa92bd4pm5vzxqr3nn4w2ncl";
-      };
+      url = "https://github.com/concourse/concourse/releases/download/v${version}/concourse-${version}-linux-amd64.tgz";
+      sha256 = "0f0kblsig0d3j4swynxj16pa5iycxa92bd4pm5vzxqr3nn4w2ncl";
+    };
     dontConfigure = true;
     dontBuild = true;
     installPhase = ''
